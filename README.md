@@ -20,6 +20,93 @@ Production-grade TypeScript/Node.js trading analysis service with Telegram integ
    npm run dev
    ```
 
+## Market Data Integration
+
+### Overview
+
+The system implements a generic `MarketDataProvider` interface that allows seamless integration with multiple cryptocurrency exchanges. This design enables easy addition of new exchanges without changing the core business logic.
+
+### Key Features
+
+- **Exchange Agnostic**: Common interface for all market data providers
+- **Built-in Rate Limiting**: Token bucket algorithm to respect API limits
+- **Intelligent Caching**: TTL-based caching for improved performance
+- **Error Handling**: Automatic retry with exponential backoff
+- **Health Monitoring**: Real-time provider health checking
+- **Type Safety**: Full TypeScript support with strict typing
+
+### Supported Exchanges
+
+- **Binance**: Production-ready integration using CCXT library
+
+### Usage Example
+
+```typescript
+import { MarketDataProvider } from './domain/interfaces/market-data.interfaces';
+import { TYPES } from './config/types';
+
+// Get provider from DI container
+const provider = container.get<MarketDataProvider>(TYPES.BinanceProvider);
+await provider.initialize();
+
+// Fetch market data
+const marketData = await provider.getMarketData('BTC/USDT');
+console.log(`BTC Price: $${marketData.price}`);
+
+// Fetch multiple symbols
+const symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT'];
+const multipleData = await provider.getMultipleMarketData(symbols);
+
+// Get order book
+const orderBook = await provider.getOrderBook('BTC/USDT', 100);
+
+// Get candlestick data
+const klines = await provider.getKlines('BTC/USDT', '1h', 24);
+
+// Get 24h ticker statistics
+const ticker = await provider.getTicker24h('BTC/USDT');
+```
+
+### Adding New Exchange Providers
+
+1. **Implement the interface**:
+   ```typescript
+   class NewExchangeProvider implements MarketDataProvider {
+     // Implement all required methods
+   }
+   ```
+
+2. **Register with DI container**:
+   ```typescript
+   container.bind<MarketDataProvider>(TYPES.NewExchangeProvider)
+     .to(NewExchangeProvider)
+     .inSingletonScope();
+   ```
+
+3. **Add comprehensive tests**:
+   ```typescript
+   describe('NewExchangeProvider', () => {
+     // Test all methods with >80% coverage
+   });
+   ```
+
+### Configuration
+
+Market data providers support various configuration options:
+
+```typescript
+interface MarketDataProviderConfig {
+  apiKey?: string;           // Exchange API key
+  apiSecret?: string;        // Exchange API secret
+  testnet?: boolean;         // Use testnet/sandbox
+  rateLimitRequests?: number; // Max requests per interval
+  rateLimitInterval?: number; // Rate limit window (ms)
+  timeout?: number;          // Request timeout (ms)
+  retryAttempts?: number;    // Max retry attempts
+  retryDelay?: number;       // Base retry delay (ms)
+}
+```
+
 4. **Build for production**
    ```bash
    npm run build

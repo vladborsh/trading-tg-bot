@@ -24,6 +24,10 @@ export const TYPES = {
   
   // Cache
   CacheService: Symbol.for('CacheService'),
+  MarketDataCache: Symbol.for('MarketDataCache'),
+  
+  // Rate Limiting
+  RateLimiter: Symbol.for('RateLimiter'),
   
   // Health
   HealthService: Symbol.for('HealthService'),

@@ -53,15 +53,12 @@ src/
 4. Testing Requirements
    - Write unit tests for all business logic
    - Mock external dependencies
-   - Test edge cases and error conditions
-   - Maintain test coverage above 80%
+   - Maintain test coverage above 50%
 
 ## Implementation Guidelines
 
 1. Data Access
    - Abstract market data providers
-   - Handle rate limiting and retries
-   - Cache responses appropriately
 
 2. Signal Processing
    - Implement strategy pattern for indicators

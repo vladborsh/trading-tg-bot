@@ -13,7 +13,56 @@ Develop a production-grade TypeScript/Node.js trading analysis service with Tele
 - Storage: File-based + optional database
 - Documentation: OpenAPI/Swagger
 
-### Key Components
+### Market Data Integration
+
+### Generic MarketDataProvider Interface
+
+The system implements a generic `MarketDataProvider` interface that allows integration with multiple exchanges:
+
+```typescript
+interface MarketDataProvider {
+  getName(): string;
+  getMarketData(symbol: string): Promise<MarketData>;
+  getMultipleMarketData(symbols: string[]): Promise<MarketData[]>;
+  getOrderBook(symbol: string, limit?: number): Promise<OrderBook>;
+  getKlines(symbol: string, interval: string, limit?: number): Promise<Kline[]>;
+  getTicker24h(symbol: string): Promise<Ticker24h>;
+  isHealthy(): Promise<boolean>;
+  initialize(): Promise<void>;
+  disconnect(): Promise<void>;
+}
+```
+
+### Key Features:
+- **Exchange Agnostic**: Common interface for all market data providers
+- **Rate Limiting**: Built-in token bucket rate limiter
+- **Caching**: Configurable TTL-based caching for market data
+- **Error Handling**: Automatic retry mechanism with exponential backoff
+- **Health Monitoring**: Provider health status checking
+- **Type Safety**: Full TypeScript support with strict typing
+
+### Current Implementations:
+- **BinanceMarketDataProvider**: Production-ready Binance integration using CCXT
+- **Cache Service**: In-memory cache with TTL support
+- **Rate Limiter**: Token bucket algorithm for API rate limiting
+
+### Usage Example:
+```typescript
+const provider = container.get<MarketDataProvider>(TYPES.BinanceProvider);
+await provider.initialize();
+
+const marketData = await provider.getMarketData('BTC/USDT');
+const orderBook = await provider.getOrderBook('BTC/USDT', 100);
+const klines = await provider.getKlines('BTC/USDT', '1h', 24);
+```
+
+### Adding New Exchanges:
+1. Implement the `MarketDataProvider` interface
+2. Register with dependency injection container
+3. Configure rate limits and API endpoints
+4. Add comprehensive unit tests
+
+## Key Components
 
 1. **Bot Service Layer**
 ```typescript

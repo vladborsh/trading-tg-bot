@@ -1,9 +1,4 @@
-export interface MarketDataProvider {
-  getName(): string;
-  getMarketData(symbol: string): Promise<MarketData>;
-  getMultipleMarketData(symbols: string[]): Promise<MarketData[]>;
-  isHealthy(): Promise<boolean>;
-}
+import { MarketData, TradingSignal } from '../entities/trading.entities';
 
 export interface SignalProcessor {
   processSignal(marketData: MarketData): Promise<TradingSignal | null>;
@@ -21,5 +16,3 @@ export interface ChartData {
   data: Array<{ x: string | number; y: number }>;
   type: 'line' | 'bar' | 'candlestick';
 }
-
-import { MarketData, TradingSignal } from '../entities/trading.entities';
