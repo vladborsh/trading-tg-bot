@@ -17,6 +17,11 @@ import { CapitalComMarketDataProvider } from '../data/capitalcom-market-data.pro
 import { InMemoryMarketDataCache } from '../services/market-data-cache.service';
 import { TokenBucketRateLimiter } from '../services/rate-limiter.service';
 
+// Indicators
+import { IndicatorService, IndicatorServiceImpl } from '../core/indicators/indicator.service';
+import { HighLowIndicator } from '../core/indicators/high-low.indicator';
+import { HighLowIndicatorInterface } from '../core/indicators/indicator.interfaces';
+
 export function setupContainer(): Container {
   const container = new Container();
 
@@ -42,6 +47,10 @@ export function setupContainer(): Container {
   container.bind<MarketDataProvider>(TYPES.MarketDataProvider).toService(TYPES.BinanceProvider);
 
   container.bind<MarketDataCache>(TYPES.MarketDataCache).to(InMemoryMarketDataCache).inSingletonScope();
+
+  // Indicators
+  container.bind<HighLowIndicatorInterface>(TYPES.HighLowIndicator).to(HighLowIndicator).inSingletonScope();
+  container.bind<IndicatorService>(TYPES.IndicatorService).to(IndicatorServiceImpl).inSingletonScope();
 
   return container;
 }
