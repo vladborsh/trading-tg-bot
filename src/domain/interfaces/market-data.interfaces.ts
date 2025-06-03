@@ -7,8 +7,6 @@ import { MarketData } from '../entities/trading.entities';
 export interface MarketDataProvider {
   getName(): string;
   getMarketData(symbol: string): Promise<MarketData>;
-  getMultipleMarketData(symbols: string[]): Promise<MarketData[]>;
-  getOrderBook(symbol: string, limit?: number): Promise<OrderBook>;
   getKlines(symbol: string, interval: string, limit?: number): Promise<Kline[]>;
   getTicker24h(symbol: string): Promise<Ticker24h>;
   isHealthy(): Promise<boolean>;

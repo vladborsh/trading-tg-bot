@@ -1,7 +1,9 @@
 import 'reflect-metadata';
+import { Container } from 'inversify';
 import { BinanceMarketDataProvider } from '../binance-market-data.provider';
-import { MarketDataCache, RateLimiter } from '../../domain/interfaces/market-data.interfaces';
+import { RateLimiter } from '../../domain/interfaces/market-data.interfaces';
 import { Logger } from 'winston';
+import { TYPES } from '../../config/types';
 
 // Mock CCXT
 jest.mock('ccxt', () => ({
@@ -24,12 +26,6 @@ jest.mock('ccxt', () => ({
       vwap: 49500,
       quoteVolume: 50000000
     }),
-    fetchOrderBook: jest.fn().mockResolvedValue({
-      symbol: 'BTC/USDT',
-      timestamp: Date.now(),
-      bids: [[49950, 1.5], [49900, 2.0]],
-      asks: [[50050, 1.2], [50100, 1.8]]
-    }),
     fetchOHLCV: jest.fn().mockResolvedValue([
       [Date.now() - 60000, 49000, 49500, 48500, 49200, 100],
       [Date.now(), 49200, 49800, 49100, 49600, 150]
@@ -41,7 +37,6 @@ jest.mock('ccxt', () => ({
 describe('BinanceMarketDataProvider', () => {
   let provider: BinanceMarketDataProvider;
   let mockLogger: jest.Mocked<Logger>;
-  let mockCache: jest.Mocked<MarketDataCache>;
   let mockRateLimiter: jest.Mocked<RateLimiter>;
 
   beforeEach(() => {
@@ -52,13 +47,6 @@ describe('BinanceMarketDataProvider', () => {
       debug: jest.fn()
     } as any;
 
-    mockCache = {
-      get: jest.fn().mockResolvedValue(null),
-      set: jest.fn().mockResolvedValue(undefined),
-      delete: jest.fn().mockResolvedValue(undefined),
-      clear: jest.fn().mockResolvedValue(undefined)
-    };
-
     mockRateLimiter = {
       checkLimit: jest.fn().mockResolvedValue(true),
       waitForLimit: jest.fn().mockResolvedValue(undefined),
@@ -66,12 +54,7 @@ describe('BinanceMarketDataProvider', () => {
       getResetTime: jest.fn().mockReturnValue(new Date())
     };
 
-    provider = new BinanceMarketDataProvider(
-      mockLogger,
-      mockCache,
-      mockRateLimiter,
-      { testnet: true }
-    );
+    provider = new BinanceMarketDataProvider(mockLogger, mockRateLimiter);
   });
 
   describe('initialization', () => {
@@ -105,35 +88,9 @@ describe('BinanceMarketDataProvider', () => {
       });
 
       expect(mockRateLimiter.waitForLimit).toHaveBeenCalled();
-      expect(mockCache.set).toHaveBeenCalledWith(
-        'market_data_BTC/USDT',
-        expect.any(Object),
-        5000
-      );
-    });
-
-    it('should return cached data when available', async () => {
-      const cachedData = {
-        symbol: 'BTC/USDT',
-        price: 49000,
-        volume: 900,
-        timestamp: new Date(),
-        change24h: 500,
-        changePercent24h: 1.0
-      };
-
-      mockCache.get.mockResolvedValueOnce(cachedData);
-
-      const result = await provider.getMarketData('BTC/USDT');
-
-      expect(result).toBe(cachedData);
-      expect(mockRateLimiter.waitForLimit).not.toHaveBeenCalled();
     });
 
     it('should handle fetch errors gracefully', async () => {
-      // Make sure cache is empty for this test
-      mockCache.get.mockResolvedValueOnce(null);
-      
       // Mock the provider's actual exchange instance to always reject
       const mockExchange = (provider as any).exchange;
       mockExchange.fetchTicker.mockRejectedValue(new Error('Network error'));
@@ -141,74 +98,6 @@ describe('BinanceMarketDataProvider', () => {
       await expect(provider.getMarketData('BTC/USDT')).rejects.toThrow(
         'Failed to fetch market data for BTC/USDT: Error: Network error'
       );
-    });
-  });
-
-  describe('getMultipleMarketData', () => {
-    beforeEach(async () => {
-      await provider.initialize();
-    });
-
-    it('should fetch multiple market data successfully', async () => {
-      const symbols = ['BTC/USDT', 'ETH/USDT'];
-      const results = await provider.getMultipleMarketData(symbols);
-
-      expect(results).toHaveLength(2);
-      expect(results[0].symbol).toBe('BTC/USDT');
-      expect(results[1].symbol).toBe('BTC/USDT'); // Mocked to return same data
-    });
-
-    it('should handle partial failures gracefully', async () => {
-      // Mock the provider's actual exchange instance
-      const mockExchange = (provider as any).exchange;
-      
-      // Clear any existing mock implementation
-      mockExchange.fetchTicker.mockReset();
-      
-      // Set up the mock to succeed for BTC/USDT and fail for INVALID/SYMBOL
-      mockExchange.fetchTicker.mockImplementation((symbol: string) => {
-        if (symbol === 'BTC/USDT') {
-          return Promise.resolve({
-            symbol: 'BTC/USDT',
-            last: 50000,
-            baseVolume: 1000,
-            timestamp: Date.now(),
-            change: 1000,
-            percentage: 2.0
-          });
-        }
-        // For any other symbol including INVALID/SYMBOL, reject with error
-        return Promise.reject(new Error('Symbol not found'));
-      });
-
-      const symbols = ['BTC/USDT', 'INVALID/SYMBOL'];
-      const results = await provider.getMultipleMarketData(symbols);
-
-      expect(results).toHaveLength(1);
-      expect(results[0].symbol).toBe('BTC/USDT');
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        'Failed to fetch data for symbol',
-        expect.objectContaining({ symbol: 'INVALID/SYMBOL' })
-      );
-    });
-  });
-
-  describe('getOrderBook', () => {
-    beforeEach(async () => {
-      await provider.initialize();
-    });
-
-    it('should fetch order book successfully', async () => {
-      const orderBook = await provider.getOrderBook('BTC/USDT', 10);
-
-      expect(orderBook).toEqual({
-        symbol: 'BTC/USDT',
-        timestamp: expect.any(Date),
-        bids: [[49950, 1.5], [49900, 2.0]],
-        asks: [[50050, 1.2], [50100, 1.8]]
-      });
-
-      expect(mockRateLimiter.waitForLimit).toHaveBeenCalled();
     });
   });
 
@@ -299,7 +188,6 @@ describe('BinanceMarketDataProvider', () => {
     it('should disconnect successfully', async () => {
       await provider.initialize();
       await provider.disconnect();
-
       expect(mockLogger.info).toHaveBeenCalledWith('Binance market data provider disconnected');
     });
   });

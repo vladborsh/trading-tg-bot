@@ -6,6 +6,7 @@ export const TYPES = {
   // Market Data
   MarketDataProvider: Symbol.for('MarketDataProvider'),
   BinanceProvider: Symbol.for('BinanceProvider'),
+  BinanceConfig: Symbol.for('BinanceConfig'),
   CapitalComProvider: Symbol.for('CapitalComProvider'),
   ForexFactoryProvider: Symbol.for('ForexFactoryProvider'),
   

@@ -3,15 +3,15 @@ import * as ccxt from 'ccxt';
 import { MarketData } from '../domain/entities/trading.entities';
 import { 
   MarketDataProvider, 
-  MarketDataProviderConfig, 
-  OrderBook, 
+  MarketDataProviderConfig,
   Kline, 
   Ticker24h,
-  MarketDataCache,
   RateLimiter
 } from '../domain/interfaces/market-data.interfaces';
 import { TYPES } from '../config/types';
-import { Logger } from 'winston';
+import { Logger } from '@/utils/logger';
+import { TIME_CONSTANTS, RATE_LIMIT_CONSTANTS } from '../config/constants';
+import { getIntervalMs, getIntervalStartTime, getIntervalEndTime } from '../utils/time-utils';
 
 @injectable()
 export class BinanceMarketDataProvider implements MarketDataProvider {
@@ -21,18 +21,15 @@ export class BinanceMarketDataProvider implements MarketDataProvider {
 
   constructor(
     @inject(TYPES.Logger) private logger: Logger,
-    @inject(TYPES.CacheService) private cache: MarketDataCache,
-    @inject(TYPES.RateLimiter) private rateLimiter: RateLimiter,
-    config?: MarketDataProviderConfig
+    @inject(TYPES.RateLimiter) private rateLimiter: RateLimiter
   ) {
     this.config = {
       testnet: false,
-      rateLimitRequests: 1200,
-      rateLimitInterval: 60000, // 1 minute
-      timeout: 30000,
-      retryAttempts: 3,
-      retryDelay: 1000,
-      ...config
+      rateLimitRequests: RATE_LIMIT_CONSTANTS.DEFAULT_REQUESTS_PER_MINUTE,
+      rateLimitInterval: RATE_LIMIT_CONSTANTS.DEFAULT_INTERVAL,
+      timeout: TIME_CONSTANTS.DEFAULT_REQUEST_TIMEOUT,
+      retryAttempts: RATE_LIMIT_CONSTANTS.DEFAULT_RETRY_ATTEMPTS,
+      retryDelay: TIME_CONSTANTS.DEFAULT_RETRY_DELAY
     };
 
     const exchangeConfig: any = {
@@ -88,14 +85,6 @@ export class BinanceMarketDataProvider implements MarketDataProvider {
 
   async getMarketData(symbol: string): Promise<MarketData> {
     await this.ensureInitialized();
-    
-    const cacheKey = `market_data_${symbol}`;
-    const cached = await this.cache.get<MarketData>(cacheKey);
-    
-    if (cached) {
-      return cached;
-    }
-
     await this.rateLimiter.waitForLimit();
 
     try {
@@ -111,62 +100,11 @@ export class BinanceMarketDataProvider implements MarketDataProvider {
         ...(ticker.change !== null && ticker.change !== undefined && { change24h: ticker.change }),
         ...(ticker.percentage !== null && ticker.percentage !== undefined && { changePercent24h: ticker.percentage })
       };
-
-      // Cache for 5 seconds
-      await this.cache.set(cacheKey, marketData, 5000);
       
       return marketData;
     } catch (error) {
       this.logger.error('Failed to fetch market data from Binance', { symbol, error });
       throw new Error(`Failed to fetch market data for ${symbol}: ${error}`);
-    }
-  }
-
-  async getMultipleMarketData(symbols: string[]): Promise<MarketData[]> {
-    await this.ensureInitialized();
-    
-    const results: MarketData[] = [];
-    const batchSize = 10; // Process in batches to respect rate limits
-    
-    for (let i = 0; i < symbols.length; i += batchSize) {
-      const batch = symbols.slice(i, i + batchSize);
-      const batchPromises = batch.map(symbol => 
-        this.getMarketData(symbol).catch(error => {
-          this.logger.warn('Failed to fetch data for symbol', { symbol, error });
-          return null;
-        })
-      );
-      
-      const batchResults = await Promise.all(batchPromises);
-      results.push(...batchResults.filter((result): result is MarketData => result !== null));
-      
-      // Add delay between batches
-      if (i + batchSize < symbols.length) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-    }
-    
-    return results;
-  }
-
-  async getOrderBook(symbol: string, limit = 100): Promise<OrderBook> {
-    await this.ensureInitialized();
-    await this.rateLimiter.waitForLimit();
-
-    try {
-      const orderbook = await this.retryOperation(() =>
-        this.exchange.fetchOrderBook(symbol, limit)
-      );
-
-      return {
-        symbol: orderbook.symbol || symbol,
-        timestamp: new Date(orderbook.timestamp || Date.now()),
-        bids: orderbook.bids.map(bid => [bid[0], bid[1]] as [number, number]),
-        asks: orderbook.asks.map(ask => [ask[0], ask[1]] as [number, number])
-      };
-    } catch (error) {
-      this.logger.error('Failed to fetch order book from Binance', { symbol, error });
-      throw new Error(`Failed to fetch order book for ${symbol}: ${error}`);
     }
   }
 
@@ -179,17 +117,20 @@ export class BinanceMarketDataProvider implements MarketDataProvider {
         this.exchange.fetchOHLCV(symbol, interval, undefined, limit)
       );
 
-      return ohlcv.map(candle => ({
-        symbol,
-        openTime: new Date(candle[0] as number),
-        closeTime: new Date((candle[0] as number) + this.getIntervalMs(interval) - 1),
-        open: candle[1] as number,
-        high: candle[2] as number,
-        low: candle[3] as number,
-        close: candle[4] as number,
-        volume: candle[5] as number,
-        trades: 0 // CCXT doesn't provide trade count in OHLCV
-      }));
+      return ohlcv.map(candle => {
+        const timestamp = candle[0] as number;
+        return {
+          symbol,
+          openTime: getIntervalStartTime(timestamp, interval),
+          closeTime: getIntervalEndTime(timestamp, interval),
+          open: candle[1] as number,
+          high: candle[2] as number,
+          low: candle[3] as number,
+          close: candle[4] as number,
+          volume: candle[5] as number,
+          trades: 0 // CCXT doesn't provide trade count in OHLCV
+        };
+      });
     } catch (error) {
       this.logger.error('Failed to fetch klines from Binance', { symbol, interval, error });
       throw new Error(`Failed to fetch klines for ${symbol}: ${error}`);
@@ -278,25 +219,8 @@ export class BinanceMarketDataProvider implements MarketDataProvider {
     throw lastError!;
   }
 
+  // Using utility function instead of internal implementation
   private getIntervalMs(interval: string): number {
-    const intervals: Record<string, number> = {
-      '1m': 60 * 1000,
-      '3m': 3 * 60 * 1000,
-      '5m': 5 * 60 * 1000,
-      '15m': 15 * 60 * 1000,
-      '30m': 30 * 60 * 1000,
-      '1h': 60 * 60 * 1000,
-      '2h': 2 * 60 * 60 * 1000,
-      '4h': 4 * 60 * 60 * 1000,
-      '6h': 6 * 60 * 60 * 1000,
-      '8h': 8 * 60 * 60 * 1000,
-      '12h': 12 * 60 * 60 * 1000,
-      '1d': 24 * 60 * 60 * 1000,
-      '3d': 3 * 24 * 60 * 60 * 1000,
-      '1w': 7 * 24 * 60 * 60 * 1000,
-      '1M': 30 * 24 * 60 * 60 * 1000
-    };
-    
-    return intervals[interval] || 60 * 1000; // Default to 1 minute
+    return getIntervalMs(interval);
   }
 }

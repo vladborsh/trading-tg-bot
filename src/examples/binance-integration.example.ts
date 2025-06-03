@@ -30,6 +30,7 @@ async function main() {
     container.bind(TYPES.Logger).toConstantValue(mockLogger);
     container.bind(TYPES.MarketDataCache).to(InMemoryMarketDataCache);
     container.bind(TYPES.RateLimiter).to(TokenBucketRateLimiter);
+    container.bind(BinanceMarketDataProvider).toSelf().inSingletonScope();
     container.bind<MarketDataProvider>(TYPES.BinanceProvider).to(BinanceMarketDataProvider);
 
     // Get provider instance
@@ -47,8 +48,8 @@ async function main() {
       return;
     }
 
-    // Fetch single market data
-    console.log('\\nFetching BTC/USDT market data...');
+    // Fetch market data
+    console.log('\nFetching BTC/USDT market data...');
     const btcData = await provider.getMarketData('BTC/USDT');
     console.log('BTC/USDT:', {
       price: btcData.price,
@@ -56,30 +57,8 @@ async function main() {
       change24h: btcData.changePercent24h
     });
 
-    // Fetch multiple market data
-    console.log('\\nFetching multiple market data...');
-    const symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT'];
-    const multipleData = await provider.getMultipleMarketData(symbols);
-    
-    multipleData.forEach(data => {
-      console.log(`${data.symbol}: $${data.price} (${data.changePercent24h?.toFixed(2)}%)`);
-    });
-
-    // Fetch order book
-    console.log('\\nFetching BTC/USDT order book...');
-    const orderBook = await provider.getOrderBook('BTC/USDT', 5);
-    console.log('Top 3 Bids:', orderBook.bids.slice(0, 3));
-    console.log('Top 3 Asks:', orderBook.asks.slice(0, 3));
-
-    // Fetch klines (candlestick data)
-    console.log('\\nFetching BTC/USDT 1-hour klines...');
-    const klines = await provider.getKlines('BTC/USDT', '1h', 5);
-    klines.forEach((kline, index) => {
-      console.log(`Kline ${index + 1}: O:${kline.open} H:${kline.high} L:${kline.low} C:${kline.close} V:${kline.volume}`);
-    });
-
     // Fetch 24h ticker
-    console.log('\\nFetching BTC/USDT 24h ticker...');
+    console.log('\nFetching BTC/USDT 24h ticker...');
     const ticker = await provider.getTicker24h('BTC/USDT');
     console.log('24h Ticker:', {
       open: ticker.openPrice,
@@ -90,8 +69,15 @@ async function main() {
       change: `${ticker.priceChangePercent.toFixed(2)}%`
     });
 
+    // Fetch klines
+    console.log('\nFetching BTC/USDT 1-hour klines...');
+    const klines = await provider.getKlines('BTC/USDT', '1h', 5);
+    klines.forEach((kline, index) => {
+      console.log(`Kline ${index + 1}: O:${kline.open} H:${kline.high} L:${kline.low} C:${kline.close} V:${kline.volume}`);
+    });
+
     // Cleanup
-    console.log('\\nDisconnecting from provider...');
+    console.log('\nDisconnecting from provider...');
     await provider.disconnect();
     console.log('Example completed successfully!');
 

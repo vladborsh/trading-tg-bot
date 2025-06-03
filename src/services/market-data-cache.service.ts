@@ -1,5 +1,6 @@
 import { injectable } from 'inversify';
 import { MarketDataCache } from '../domain/interfaces/market-data.interfaces';
+import { TIME_CONSTANTS, CACHE_CONSTANTS } from '../config/constants';
 
 interface CacheItem<T> {
   value: T;
@@ -12,10 +13,10 @@ export class InMemoryMarketDataCache implements MarketDataCache {
   private cleanupInterval: NodeJS.Timeout;
 
   constructor() {
-    // Clean up expired items every 30 seconds
+    // Clean up expired items at regular intervals
     this.cleanupInterval = setInterval(() => {
       this.cleanupExpired();
-    }, 30000);
+    }, CACHE_CONSTANTS.CLEANUP_INTERVAL);
   }
 
   async get<T>(key: string): Promise<T | null> {
@@ -33,7 +34,7 @@ export class InMemoryMarketDataCache implements MarketDataCache {
     return item.value as T;
   }
 
-  async set<T>(key: string, value: T, ttl = 60000): Promise<void> {
+  async set<T>(key: string, value: T, ttl = CACHE_CONSTANTS.DEFAULT_TTL): Promise<void> {
     const expiry = Date.now() + ttl;
     this.cache.set(key, { value, expiry });
   }

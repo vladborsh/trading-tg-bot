@@ -3,16 +3,19 @@ import { Container } from 'inversify';
 import { config } from '@/config/environment';
 import { Logger } from '@/utils/logger';
 import { BotService } from '@/domain/interfaces/bot-service.interface';
+import { MarketDataProvider } from '@/domain/interfaces/market-data.interfaces';
 import { TYPES } from '@/config/types';
 import { setupContainer } from '@/config/inversify.config';
 
 class Application {
   private container: Container;
   private logger: Logger;
+  private marketDataProvider: MarketDataProvider;
 
   constructor() {
     this.container = setupContainer();
     this.logger = this.container.get<Logger>(TYPES.Logger);
+    this.marketDataProvider = this.container.get<MarketDataProvider>(TYPES.BinanceProvider);
   }
 
   public async start(): Promise<void> {
@@ -22,8 +25,16 @@ class Application {
         environment: config.NODE_ENV,
       });
 
-      const botService = this.container.get<BotService>(TYPES.BotService);
+      // Initialize market data provider
+      await this.marketDataProvider.initialize();
+      const isHealthy = await this.marketDataProvider.isHealthy();
+      this.logger.info('Market data provider health check', { isHealthy });
       
+      if (!isHealthy) {
+        throw new Error('Market data provider is not healthy');
+      }
+
+      const botService = this.container.get<BotService>(TYPES.BotService);
       await botService.initialize();
       await botService.startBackgroundTasks();
 
@@ -40,6 +51,9 @@ class Application {
 
   private async shutdown(): Promise<void> {
     this.logger.info('Shutting down Trading Bot Application');
+    if (this.marketDataProvider) {
+      await this.marketDataProvider.disconnect();
+    }
     process.exit(0);
   }
 }

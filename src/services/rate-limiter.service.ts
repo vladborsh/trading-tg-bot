@@ -1,24 +1,27 @@
-import { injectable } from 'inversify';
+import { injectable, inject } from 'inversify';
 import { RateLimiter } from '../domain/interfaces/market-data.interfaces';
+import { TYPES } from '../config/types';
+import { TIME_CONSTANTS, RATE_LIMIT_CONSTANTS } from '../config/constants';
+import { Logger } from '../utils/logger';
 
 @injectable()
 export class TokenBucketRateLimiter implements RateLimiter {
   private tokens: number;
   private lastRefill: number;
-  private readonly maxTokens: number;
-  private readonly refillRate: number; // tokens per second
-  private readonly waitInterval: number;
+  private readonly maxTokens: number = RATE_LIMIT_CONSTANTS.DEFAULT_REQUESTS_PER_MINUTE;
+  private readonly windowMs: number = TIME_CONSTANTS.MINUTE;
+  private readonly waitInterval: number = RATE_LIMIT_CONSTANTS.DEFAULT_WAIT_INTERVAL;
+  private readonly refillRate: number;
 
-  constructor(
-    maxRequests = 1200, // Binance spot API limit
-    windowMs = 60000, // 1 minute window
-    waitInterval = 100 // Wait interval for polling in ms
-  ) {
-    this.maxTokens = maxRequests;
-    this.refillRate = maxRequests / (windowMs / 1000); // tokens per second
-    this.tokens = maxRequests;
+  constructor(@inject(TYPES.Logger) private logger: Logger) {
+    this.tokens = this.maxTokens;
     this.lastRefill = Date.now();
-    this.waitInterval = waitInterval;
+    this.refillRate = this.maxTokens / (this.windowMs / 1000); // tokens per second
+    this.logger.info('Rate limiter initialized', {
+      maxTokens: this.maxTokens,
+      refillRate: this.refillRate,
+      waitInterval: this.waitInterval
+    });
   }
 
   async checkLimit(): Promise<boolean> {
@@ -31,7 +34,11 @@ export class TokenBucketRateLimiter implements RateLimiter {
     while (!(await this.checkLimit())) {
       iterations++;
       if (iterations > 100) {
-        console.log('waitForLimit stuck in loop. Current tokens:', this.tokens, 'Refill rate:', this.refillRate);
+        this.logger.warn('waitForLimit stuck in loop', {
+          tokens: this.tokens,
+          refillRate: this.refillRate,
+          iterations
+        });
         break; // Prevent infinite loop
       }
       // Wait for next refill
@@ -48,6 +55,7 @@ export class TokenBucketRateLimiter implements RateLimiter {
   }
 
   getResetTime(): Date {
+    this.refillTokens();
     const timeToFullRefill = (this.maxTokens - this.tokens) / this.refillRate * 1000;
     return new Date(Date.now() + timeToFullRefill);
   }
@@ -67,6 +75,11 @@ export class TokenBucketRateLimiter implements RateLimiter {
       this.lastRefill = now;
     } else if (timePassed < 0) {
       // Time went backwards, reset lastRefill to now
+      this.logger.warn('Time went backwards, resetting lastRefill', {
+        now,
+        lastRefill: this.lastRefill,
+        timePassed
+      });
       this.lastRefill = now;
     }
   }
