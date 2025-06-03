@@ -24,6 +24,8 @@ export class BinanceMarketDataProvider implements MarketDataProvider {
     @inject(TYPES.RateLimiter) private rateLimiter: RateLimiter
   ) {
     this.config = {
+      apiKey: process.env.BINANCE_API_KEY || '',
+      apiSecret: process.env.BINANCE_SECRET_KEY || '',
       testnet: false,
       rateLimitRequests: RATE_LIMIT_CONSTANTS.DEFAULT_REQUESTS_PER_MINUTE,
       rateLimitInterval: RATE_LIMIT_CONSTANTS.DEFAULT_INTERVAL,

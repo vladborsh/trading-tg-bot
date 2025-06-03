@@ -10,12 +10,14 @@ import { setupContainer } from '@/config/inversify.config';
 class Application {
   private container: Container;
   private logger: Logger;
-  private marketDataProvider: MarketDataProvider;
+  private binanceProvider: MarketDataProvider;
+  private capitalComProvider: MarketDataProvider;
 
   constructor() {
     this.container = setupContainer();
     this.logger = this.container.get<Logger>(TYPES.Logger);
-    this.marketDataProvider = this.container.get<MarketDataProvider>(TYPES.BinanceProvider);
+    this.binanceProvider = this.container.get<MarketDataProvider>(TYPES.BinanceProvider);
+    this.capitalComProvider = this.container.get<MarketDataProvider>(TYPES.CapitalComProvider);
   }
 
   public async start(): Promise<void> {
@@ -25,14 +27,11 @@ class Application {
         environment: config.NODE_ENV,
       });
 
-      // Initialize market data provider
-      await this.marketDataProvider.initialize();
-      const isHealthy = await this.marketDataProvider.isHealthy();
-      this.logger.info('Market data provider health check', { isHealthy });
-      
-      if (!isHealthy) {
-        throw new Error('Market data provider is not healthy');
-      }
+      // Initialize market data providers
+      await Promise.all([
+        this.initializeProvider(this.binanceProvider, 'Binance'),
+        this.initializeProvider(this.capitalComProvider, 'Capital.com')
+      ]);
 
       const botService = this.container.get<BotService>(TYPES.BotService);
       await botService.initialize();
@@ -49,11 +48,22 @@ class Application {
     }
   }
 
+  private async initializeProvider(provider: MarketDataProvider, name: string): Promise<void> {
+    await provider.initialize();
+    const isHealthy = await provider.isHealthy();
+    this.logger.info(`Market data provider ${name} health check`, { isHealthy });
+    
+    if (!isHealthy) {
+      throw new Error(`Market data provider ${name} is not healthy`);
+    }
+  }
+
   private async shutdown(): Promise<void> {
     this.logger.info('Shutting down Trading Bot Application');
-    if (this.marketDataProvider) {
-      await this.marketDataProvider.disconnect();
-    }
+    await Promise.all([
+      this.binanceProvider?.disconnect(),
+      this.capitalComProvider?.disconnect()
+    ]);
     process.exit(0);
   }
 }

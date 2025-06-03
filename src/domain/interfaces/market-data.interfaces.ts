@@ -18,8 +18,9 @@ export interface MarketDataProvider {
  * Configuration interface for market data providers
  */
 export interface MarketDataProviderConfig {
-  apiKey?: string;
-  apiSecret?: string;
+  apiKey: string;
+  apiSecret: string;
+  identifier?: string; // Optional for backward compatibility with other providers
   testnet?: boolean;
   rateLimitRequests?: number;
   rateLimitInterval?: number;

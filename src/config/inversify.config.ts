@@ -13,6 +13,7 @@ import { DefaultHealthService } from '../services/health.service';
 // Market Data
 import { MarketDataProvider, MarketDataCache, RateLimiter, MarketDataProviderConfig } from '../domain/interfaces/market-data.interfaces';
 import { BinanceMarketDataProvider } from '../data/binance-market-data.provider';
+import { CapitalComMarketDataProvider } from '../data/capitalcom-market-data.provider';
 import { InMemoryMarketDataCache } from '../services/market-data-cache.service';
 import { TokenBucketRateLimiter } from '../services/rate-limiter.service';
 
@@ -32,6 +33,12 @@ export function setupContainer(): Container {
   // Bind BinanceMarketDataProvider
   container.bind(BinanceMarketDataProvider).toSelf().inSingletonScope();
   container.bind<MarketDataProvider>(TYPES.BinanceProvider).to(BinanceMarketDataProvider);
+
+  // Bind CapitalComMarketDataProvider
+  container.bind(CapitalComMarketDataProvider).toSelf().inSingletonScope();
+  container.bind<MarketDataProvider>(TYPES.CapitalComProvider).to(CapitalComMarketDataProvider);
+
+  // Set default provider
   container.bind<MarketDataProvider>(TYPES.MarketDataProvider).toService(TYPES.BinanceProvider);
 
   container.bind<MarketDataCache>(TYPES.MarketDataCache).to(InMemoryMarketDataCache).inSingletonScope();
