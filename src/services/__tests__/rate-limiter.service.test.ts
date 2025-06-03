@@ -32,10 +32,12 @@ describe('TokenBucketRateLimiter', () => {
     });
 
     it('should provide reset time', async () => {
-      // When bucket is full, reset time should be current time or very close
+      // When bucket is full, reset time should be current time or very close (within 5ms tolerance)
       const resetTimeWhenFull = rateLimiter.getResetTime();
       expect(resetTimeWhenFull).toBeInstanceOf(Date);
-      expect(resetTimeWhenFull.getTime()).toBeGreaterThanOrEqual(Date.now() - 1); // Allow for small timing differences
+      const now = Date.now();
+      expect(resetTimeWhenFull.getTime()).toBeGreaterThanOrEqual(now - 5); // Allow for small timing differences
+      expect(resetTimeWhenFull.getTime()).toBeLessThanOrEqual(now + 5); // Ensure it's not too far in the future
 
       // Consume some tokens to test reset time calculation
       await rateLimiter.waitForLimit(); // Consume 1 token

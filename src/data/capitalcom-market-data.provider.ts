@@ -4,7 +4,8 @@ import {
     MarketDataProvider, 
     MarketDataProviderConfig, 
     Kline, 
-    Ticker24h 
+    Ticker24h,
+    RateLimiter 
 } from '../domain/interfaces/market-data.interfaces';
 import { Logger } from '../utils/logger';
 import { TYPES } from '../config/types';
@@ -44,7 +45,8 @@ export class CapitalComMarketDataProvider implements MarketDataProvider {
     private readonly config: Required<MarketDataProviderConfig>;
 
     constructor(
-        @inject(TYPES.Logger) private readonly logger: Logger
+        @inject(TYPES.Logger) private readonly logger: Logger,
+        @inject(TYPES.RateLimiter) private readonly rateLimiter: RateLimiter
     ) {
         // Validate required environment variables
         if (!process.env.CAPITAL_COM_API_KEY || !process.env.CAPITAL_COM_CUSTOM_PASS) {
@@ -76,6 +78,8 @@ export class CapitalComMarketDataProvider implements MarketDataProvider {
 
     async initialize(): Promise<void> {
         try {
+            await this.rateLimiter.waitForLimit();
+
             // First get encryption key if using encrypted password
             const { data: encKeyData } = await this.http.get('/api/v1/session/encryptionKey', {
                 headers: {
@@ -101,7 +105,7 @@ export class CapitalComMarketDataProvider implements MarketDataProvider {
 
             this.setupAxiosDefaults();
             await this.initializeWebSocket();
-
+            
             this.logger.info('CapitalCom provider initialized successfully');
             this.isConnected = true;
         } catch (error) {
@@ -156,6 +160,8 @@ export class CapitalComMarketDataProvider implements MarketDataProvider {
     }
 
     async getMarketData(symbol: string): Promise<MarketData> {
+        await this.rateLimiter.waitForLimit();
+        
         try {
             const { data } = await this.http.get<CapitalComMarketResponse>(`/api/v1/markets/${symbol}`);
             

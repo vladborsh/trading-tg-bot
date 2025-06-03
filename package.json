@@ -13,7 +13,9 @@
     "test:coverage": "jest --coverage",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
-    "clean": "rimraf dist"
+    "clean": "rimraf dist",
+    "example:binance": "ts-node src/examples/binance-integration.example.ts",
+    "example:capitalcom": "ts-node src/examples/capitalcom-integration.example.ts"
   },
   "keywords": [
     "trading",
