@@ -3,6 +3,7 @@
 ## Architecture & Design Principles
 - Avoid typescript `any` type
 - Use TypeScript with strict type checking
+- Cover new classes with unit Jest tests
 - Follow functional programming principles
 - Use pure functions for business logic
 - Implement a modular architecture with clear boundaries
@@ -11,7 +12,6 @@
 - Implement SOLID principles with emphasis on:
   - Single Responsibility Principle
   - Dependency Inversion using interfaces and Inversify DI
-- Write pure, testable functions for core functionality
 - Maintain clear separation between:
   - Data access layer (market data fetching)
   - Business logic (signal processing, analysis)
