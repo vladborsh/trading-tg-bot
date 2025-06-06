@@ -2,7 +2,6 @@
  * High/Low Indicator implementation
  * Calculates highest and lowest prices for specified time periods
  */
-import { injectable, inject } from 'inversify';
 import { 
   HighLowIndicatorInterface, 
   HighLowResult, 
@@ -10,18 +9,10 @@ import {
   PeriodSpec,
   ExtendedMarketData
 } from './indicator.interfaces';
-import { Kline, MarketDataProvider } from '../../domain/interfaces/market-data.interfaces';
-import { TYPES } from '../../config/types';
-import { Logger } from '../../utils/logger';
+import { Kline } from '../../domain/interfaces/market-data.interfaces';
 import { TIME_CONSTANTS } from '../../config/constants';
-import { getIntervalMs, getIntervalStartTime } from '../../utils/time-utils';
 
-@injectable()
 export class HighLowIndicator implements HighLowIndicatorInterface {
-  constructor(
-    @inject(TYPES.Logger) private logger: Logger
-  ) {}
-
   getName(): string {
     return 'HighLowIndicator';
   }
@@ -46,17 +37,6 @@ export class HighLowIndicator implements HighLowIndicatorInterface {
 
     const extendedData = this.enrichKlineData(filteredData);
     const result = this.calculateHighLow(extendedData, config);
-
-    this.logger.debug('High/Low calculation completed', {
-      symbol: config.symbol,
-      period: config.period,
-      dataPoints: filteredData.length,
-      result: {
-        high: result.high,
-        low: result.low,
-        range: result.range
-      }
-    });
 
     return result;
   }

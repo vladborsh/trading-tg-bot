@@ -6,38 +6,38 @@
  */
 
 import 'reflect-metadata';
-import { Container } from 'inversify';
-import { IndicatorService } from '../core/indicators/indicator.service';
+import { HighLowIndicator } from '../core/indicators/high-low.indicator';
 import { HighLowIndicatorConfig } from '../core/indicators/indicator.interfaces';
+import { MarketDataProvider } from '../domain/interfaces/market-data.interfaces';
 import { TYPES } from '../config/types';
 import { setupContainer } from '../config/inversify.config';
-
-// Mock logger for example
-const mockLogger = {
-  info: console.log,
-  error: console.error,
-  warn: console.warn,
-  debug: console.debug
-} as any;
 
 async function main() {
   console.log('🎯 High/Low Indicator Example\n');
 
   try {
-    // Setup dependency injection container
+    // Setup dependency injection container for market data provider
     const container = setupContainer();
     
-    // Get the indicator service
-    const indicatorService = container.get<IndicatorService>(TYPES.IndicatorService);
+    // Get the market data provider 
+    const marketDataProvider = container.get<MarketDataProvider>(TYPES.MarketDataProvider);
+    
+    // Create indicator instance (no dependencies needed)
+    const indicator = new HighLowIndicator();
 
     // Example 1: Previous day high/low
     console.log('📊 Example 1: Previous Day High/Low');
     console.log('=====================================');
     
-    const prevDayResult = await indicatorService.getHighLowForPreviousPeriod(
-      'BTC/USDT', 
-      'day'
-    );
+    // Fetch market data for BTC/USDT
+    const btcData = await marketDataProvider.getKlines('BTC/USDT', '1h', 48); // 2 days of hourly data
+    
+    const prevDayConfig: HighLowIndicatorConfig = {
+      symbol: 'BTC/USDT',
+      period: 'prev_day'
+    };
+    
+    const prevDayResult = await indicator.calculate(btcData, prevDayConfig);
     
     console.log(`Symbol: ${prevDayResult.symbol}`);
     console.log(`Period: Previous Day`);
@@ -50,10 +50,15 @@ async function main() {
     console.log('📊 Example 2: Previous Week High/Low');
     console.log('=====================================');
     
-    const prevWeekResult = await indicatorService.getHighLowForPreviousPeriod(
-      'ETH/USDT', 
-      'week'
-    );
+    // Fetch more data for weekly analysis
+    const ethData = await marketDataProvider.getKlines('ETH/USDT', '4h', 84); // 2 weeks of 4-hour data
+    
+    const prevWeekConfig: HighLowIndicatorConfig = {
+      symbol: 'ETH/USDT',
+      period: 'prev_week'
+    };
+    
+    const prevWeekResult = await indicator.calculate(ethData, prevWeekConfig);
     
     console.log(`Symbol: ${prevWeekResult.symbol}`);
     console.log(`Period: Previous Week`);
@@ -66,6 +71,9 @@ async function main() {
     console.log('📊 Example 3: Custom Period High/Low');
     console.log('=====================================');
     
+    // Fetch data for BNB/USDT for custom period
+    const bnbData = await marketDataProvider.getKlines('BNB/USDT', '1h', 168); // 7 days of hourly data
+    
     const customConfig: HighLowIndicatorConfig = {
       symbol: 'BNB/USDT',
       period: {
@@ -77,7 +85,7 @@ async function main() {
       timezone: 'UTC'
     };
     
-    const customResult = await indicatorService.calculateHighLow(customConfig);
+    const customResult = await indicator.calculate(bnbData, customConfig);
     
     console.log(`Symbol: ${customResult.symbol}`);
     console.log(`Period: Custom (Last 7 days)`);
@@ -90,6 +98,9 @@ async function main() {
     console.log('📊 Example 4: Rolling 24 Hours High/Low');
     console.log('========================================');
     
+    // Fetch data for ADA/USDT for rolling analysis
+    const adaData = await marketDataProvider.getKlines('ADA/USDT', '1h', 24); // 24 hours of hourly data
+    
     const rollingConfig: HighLowIndicatorConfig = {
       symbol: 'ADA/USDT',
       period: {
@@ -100,7 +111,7 @@ async function main() {
       useBodyHighLow: false
     };
     
-    const rollingResult = await indicatorService.calculateHighLow(rollingConfig);
+    const rollingResult = await indicator.calculate(adaData, rollingConfig);
     
     console.log(`Symbol: ${rollingResult.symbol}`);
     console.log(`Period: Rolling 24 Hours`);
@@ -113,6 +124,9 @@ async function main() {
     console.log('📊 Example 5: Body High/Low (Open/Close Range)');
     console.log('===============================================');
     
+    // Fetch data for SOL/USDT
+    const solData = await marketDataProvider.getKlines('SOL/USDT', '1h', 48); // 2 days of hourly data
+    
     const bodyConfig: HighLowIndicatorConfig = {
       symbol: 'SOL/USDT',
       period: 'prev_day',
@@ -120,7 +134,7 @@ async function main() {
       timezone: 'UTC'
     };
     
-    const bodyResult = await indicatorService.calculateHighLow(bodyConfig);
+    const bodyResult = await indicator.calculate(solData, bodyConfig);
     
     console.log(`Symbol: ${bodyResult.symbol}`);
     console.log(`Period: Previous Day (Body High/Low)`);
@@ -133,14 +147,19 @@ async function main() {
     console.log('📊 Example 6: Multiple Indicators');
     console.log('==================================');
     
-    const multipleConfigs: HighLowIndicatorConfig[] = [
-      { symbol: 'BTC/USDT', period: 'current_day' },
-      { symbol: 'ETH/USDT', period: 'current_day' },
-      { symbol: 'BNB/USDT', period: 'current_day' },
-      { symbol: 'ADA/USDT', period: 'current_day' }
-    ];
+    const symbols = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'ADA/USDT'];
+    const multipleResults = [];
     
-    const multipleResults = await indicatorService.calculateMultipleHighLow(multipleConfigs);
+    // Process each symbol sequentially to avoid rate limits
+    for (const symbol of symbols) {
+      const data = await marketDataProvider.getKlines(symbol, '1h', 24); // Current day data
+      const config: HighLowIndicatorConfig = {
+        symbol,
+        period: 'current_day'
+      };
+      const result = await indicator.calculate(data, config);
+      multipleResults.push(result);
+    }
     
     console.log('Current Day High/Low Summary:');
     multipleResults.forEach(result => {
@@ -152,11 +171,20 @@ async function main() {
     console.log('📊 Example 7: All Previous Periods for BTC/USDT');
     console.log('================================================');
     
-    const periods: Array<'day' | 'week' | 'month'> = ['day', 'week', 'month'];
+    const periods = [
+      { name: 'day', period: 'prev_day' as const, interval: '1h', limit: 48 },
+      { name: 'week', period: 'prev_week' as const, interval: '4h', limit: 84 },
+      { name: 'month', period: 'prev_month' as const, interval: '1d', limit: 62 }
+    ];
     
-    for (const period of periods) {
-      const result = await indicatorService.getHighLowForPreviousPeriod('BTC/USDT', period);
-      console.log(`Previous ${period}: High $${result.high.toFixed(2)}, Low $${result.low.toFixed(2)}, Range ${result.rangePercent.toFixed(2)}%`);
+    for (const { name, period, interval, limit } of periods) {
+      const data = await marketDataProvider.getKlines('BTC/USDT', interval, limit);
+      const config: HighLowIndicatorConfig = {
+        symbol: 'BTC/USDT',
+        period
+      };
+      const result = await indicator.calculate(data, config);
+      console.log(`Previous ${name}: High $${result.high.toFixed(2)}, Low $${result.low.toFixed(2)}, Range ${result.rangePercent.toFixed(2)}%`);
     }
 
     console.log('\n✅ All examples completed successfully!');

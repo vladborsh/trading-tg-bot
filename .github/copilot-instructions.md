@@ -18,20 +18,6 @@
   - Presentation layer (notifications, reporting)
   - Command handling
 
-## Project Structure
-
-```
-src/
-├── bot/          # Telegram bot interface
-├── config/       # Environment configuration, constants
-├── core/         # Trading logic, indicators
-├── data/         # Market data integrations
-├── domain/       # Core entities, interfaces
-├── services/     # Supporting services (charts, reports)
-├── utils/        # Shared utilities
-├── backtesting/  # Backtesting framework
-└── main.ts       # Application entry point
-```
 
 ## Development Standards
 

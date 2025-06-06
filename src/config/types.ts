@@ -16,7 +16,6 @@ export const TYPES = {
   VolumeAnalyzer: Symbol.for('VolumeAnalyzer'),
   
   // Indicators
-  IndicatorService: Symbol.for('IndicatorService'),
   HighLowIndicator: Symbol.for('HighLowIndicator'),
   
   // Notification

@@ -12,14 +12,7 @@ describe('HighLowIndicator', () => {
   let mockLogger: jest.Mocked<Logger>;
 
   beforeEach(() => {
-    mockLogger = {
-      info: jest.fn(),
-      error: jest.fn(),
-      warn: jest.fn(),
-      debug: jest.fn(),
-    } as any;
-
-    indicator = new HighLowIndicator(mockLogger);
+    indicator = new HighLowIndicator();
   });
 
   describe('getName', () => {
@@ -282,29 +275,6 @@ describe('HighLowIndicator', () => {
 
       expect(result.high).toBe(350);
       expect(result.low).toBe(280);
-    });
-
-    it('should log debug information during calculation', async () => {
-      const config: HighLowIndicatorConfig = {
-        symbol: 'BTC/USDT',
-        period: '1h'
-      };
-
-      await indicator.calculate(sampleData, config);
-
-      expect(mockLogger.debug).toHaveBeenCalledWith(
-        'High/Low calculation completed',
-        expect.objectContaining({
-          symbol: 'BTC/USDT',
-          period: '1h',
-          dataPoints: 3,
-          result: expect.objectContaining({
-            high: 120,
-            low: 90,
-            range: 30
-          })
-        })
-      );
     });
   });
 });

@@ -18,7 +18,6 @@ import { InMemoryMarketDataCache } from '../services/market-data-cache.service';
 import { TokenBucketRateLimiter } from '../services/rate-limiter.service';
 
 // Indicators
-import { IndicatorService, IndicatorServiceImpl } from '../core/indicators/indicator.service';
 import { HighLowIndicator } from '../core/indicators/high-low.indicator';
 import { HighLowIndicatorInterface } from '../core/indicators/indicator.interfaces';
 
@@ -50,7 +49,6 @@ export function setupContainer(): Container {
 
   // Indicators
   container.bind<HighLowIndicatorInterface>(TYPES.HighLowIndicator).to(HighLowIndicator).inSingletonScope();
-  container.bind<IndicatorService>(TYPES.IndicatorService).to(IndicatorServiceImpl).inSingletonScope();
 
   return container;
 }
