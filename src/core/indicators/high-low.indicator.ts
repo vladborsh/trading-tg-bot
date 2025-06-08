@@ -7,10 +7,12 @@ import {
   HighLowResult, 
   HighLowIndicatorConfig, 
   PeriodSpec,
-  ExtendedMarketData
+  ExtendedMarketData,
+  SessionSpec
 } from './indicator.interfaces';
 import { Kline } from '../../domain/interfaces/market-data.interfaces';
-import { TIME_CONSTANTS } from '../../config/constants';
+import { TIME_CONSTANTS, TRADING_CONSTANTS } from '../../config/constants';
+import { isWithinSession } from '../../utils/date-helpers';
 
 export class HighLowIndicator implements HighLowIndicatorInterface {
   getName(): string {
@@ -63,27 +65,28 @@ export class HighLowIndicator implements HighLowIndicatorInterface {
   /**
    * Filter data based on the specified period
    */
-  private filterDataByPeriod(data: Kline[], period: PeriodSpec, timezone = 'UTC'): Kline[] {
+  private filterDataByPeriod(data: Kline[], period: PeriodSpec, timezone?: string): Kline[] {
     const now = new Date();
+    const effectiveTimezone = timezone || TRADING_CONSTANTS.DEFAULT_TIMEZONE;
     
     switch (period) {
       case 'prev_day':
-        return this.getPreviousDayData(data, now, timezone);
+        return this.getPreviousDayData(data, now, effectiveTimezone);
       
       case 'prev_week':
-        return this.getPreviousWeekData(data, now, timezone);
+        return this.getPreviousWeekData(data, now, effectiveTimezone);
       
       case 'prev_month':
-        return this.getPreviousMonthData(data, now, timezone);
+        return this.getPreviousMonthData(data, now, effectiveTimezone);
       
       case 'current_day':
-        return this.getCurrentDayData(data, now, timezone);
+        return this.getCurrentDayData(data, now, effectiveTimezone);
       
       case 'current_week':
-        return this.getCurrentWeekData(data, now, timezone);
+        return this.getCurrentWeekData(data, now, effectiveTimezone);
       
       case 'current_month':
-        return this.getCurrentMonthData(data, now, timezone);
+        return this.getCurrentMonthData(data, now, effectiveTimezone);
       
       default:
         if (typeof period === 'string') {
@@ -93,6 +96,8 @@ export class HighLowIndicator implements HighLowIndicatorInterface {
           return this.getCustomPeriodData(data, period.startTime, period.endTime);
         } else if (period.type === 'rolling') {
           return this.getRollingPeriodData(data, period.periods, period.interval);
+        } else if (period.type === 'time_session') {
+          return this.getSessionPeriodData(data, period, effectiveTimezone);
         }
         
         throw new Error(`Unsupported period type: ${JSON.stringify(period)}`);
@@ -212,6 +217,13 @@ export class HighLowIndicator implements HighLowIndicatorInterface {
   private getRollingPeriodData(data: Kline[], periods: number, interval: string): Kline[] {
     const sortedData = [...data].sort((a, b) => b.openTime.getTime() - a.openTime.getTime());
     return sortedData.slice(0, periods).reverse();
+  }
+
+  /**
+   * Get data for a specific time session (e.g., London session 3am-8am NY time)
+   */
+  private getSessionPeriodData(data: Kline[], session: SessionSpec, timezone?: string): Kline[] {
+    return data.filter(kline => isWithinSession(kline.openTime, session, timezone));
   }
 
   /**

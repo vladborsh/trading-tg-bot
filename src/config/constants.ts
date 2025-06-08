@@ -50,6 +50,34 @@ export const RATE_LIMIT_CONSTANTS = {
 } as const;
 
 /**
+ * Trading session constants
+ */
+export const TRADING_CONSTANTS = {
+  DEFAULT_TIMEZONE: 'America/New_York',
+  LONDON_SESSION_START_HOUR: 3,
+  LONDON_SESSION_END_HOUR: 8,
+  US_SESSION_START_HOUR: 9,
+  US_SESSION_START_MINUTE: 30,
+  US_SESSION_END_HOUR: 16,
+  US_SESSION_END_MINUTE: 0,
+  ASIAN_SESSION_START_HOUR: 19,
+  ASIAN_SESSION_END_HOUR: 2,
+} as const;
+
+/**
+ * Strategy calculation constants
+ */
+export const STRATEGY_CONSTANTS = {
+  DEFAULT_KLINES_LIMIT: 100,
+  DEFAULT_MARKET_DATA_INTERVAL: '5m',
+  CROSS_DETECTION_LOOKBACK_PERIODS: 10,
+  BASE_CONFIDENCE_SCORE: 0.5,
+  CONFIDENCE_INCREMENT_PER_ASSET: 0.1,
+  MAX_DISTANCE_CONFIDENCE_BOOST: 0.3,
+  DISTANCE_CONFIDENCE_MULTIPLIER: 2,
+} as const;
+
+/**
  * Cache constants
  */
 export const CACHE_CONSTANTS = {
@@ -57,4 +85,27 @@ export const CACHE_CONSTANTS = {
   MIN_TTL: 1000, // 1 second
   MAX_TTL: 24 * 60 * 60 * 1000, // 24 hours
   CLEANUP_INTERVAL: 30 * 1000, // 30 seconds
+} as const;
+
+/**
+ * Bot messaging and UI constants
+ */
+export const BOT_CONSTANTS = {
+  MILLISECONDS_PER_MINUTE: 60 * 1000,
+  PERCENTAGE_MULTIPLIER: 100,
+  PRICE_DECIMAL_PLACES: 4,
+  NY_TIMEZONE: 'America/New_York',
+  NY_SESSION_START_HOUR: 8,
+  NY_SESSION_END_HOUR: 12,
+
+  // Strategy configuration
+  DEFAULT_CANDLE_INTERVAL: MARKET_TIME_INTERVALS.FIVE_MINUTES,
+  MIN_CORRELATED_ASSETS: 1,
+  KLINES_LIMIT: 100,
+  CROSS_DETECTION_LOOKBACK: 10,
+
+  // Cron schedules
+  HEALTH_CHECK_SCHEDULE: '*/5 * * * *',
+  DAILY_REPORT_SCHEDULE: '0 9 * * *',
+  CORRELATION_CHECK_SCHEDULE: '*/5 * * * 1-5',
 } as const;

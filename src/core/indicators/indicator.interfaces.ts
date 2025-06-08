@@ -36,6 +36,18 @@ export interface HighLowResult {
 }
 
 /**
+ * Time-based session specification
+ */
+export interface SessionSpec {
+  type: 'time_session';
+  startHour: number; // 0-23 hour in specified timezone
+  startMinute?: number; // 0-59 minutes, default 0
+  endHour: number; // 0-23 hour in specified timezone
+  endMinute?: number; // 0-59 minutes, default 0
+  timezone?: string; // Default 'America/New_York'
+}
+
+/**
  * Period specification for indicators
  */
 export type PeriodSpec = 
@@ -55,7 +67,8 @@ export type PeriodSpec =
       type: 'rolling';
       periods: number;
       interval: string;
-    };
+    }
+  | SessionSpec;
 
 /**
  * Configuration for High/Low indicator

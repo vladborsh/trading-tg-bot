@@ -7,11 +7,13 @@
 - Follow functional programming principles
 - Use pure functions for business logic
 - Implement a modular architecture with clear boundaries
-- Use interfaces to define contracts for services
 - Use InversifyJS for dependency injection
 - Implement SOLID principles with emphasis on:
   - Single Responsibility Principle
   - Dependency Inversion using interfaces and Inversify DI
+- Method length should not exceed 20 lines
+- Class length should not exceed 200 lines
+   - If a class exceeds 200 lines, consider refactoring into smaller set of classes
 - Maintain clear separation between:
   - Data access layer (market data fetching)
   - Business logic (signal processing, analysis)

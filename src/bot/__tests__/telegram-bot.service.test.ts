@@ -1,13 +1,18 @@
 import { TelegramBotService } from '../telegram-bot.service';
 import { Logger } from '../../utils/logger';
 import { HealthService } from '../../domain/interfaces/health-service.interface';
-import { TelegramContext, HealthStatus } from '../../domain/interfaces/bot-service.interface';
+import { TelegramContext, HealthStatus, ServiceHealth, BotService } from '../../domain/interfaces/bot-service.interface';
+import { CorrelationCrackStrategyInterface, StrategyResult } from '../../core/strategies/strategy.interfaces';
+import { MessageFormatterService } from '../message-formatter.service';
+import { CorrelationConfigurationService } from '../correlation-configuration.service';
+import { CorrelationStrategyRunnerService } from '../correlation-strategy-runner.service';
 import TelegramBot from 'node-telegram-bot-api';
 import * as cron from 'node-cron';
 
 // Mock dependencies
 jest.mock('node-telegram-bot-api');
 jest.mock('node-cron');
+jest.mock('../message-formatter.service');
 jest.mock('../../config/environment', () => ({
   config: {
     TELEGRAM_BOT_TOKEN: 'test-token',
@@ -19,8 +24,11 @@ describe('TelegramBotService', () => {
   let telegramBotService: TelegramBotService;
   let mockLogger: jest.Mocked<Logger>;
   let mockHealthService: jest.Mocked<HealthService>;
+  let mockMessageFormatter: jest.Mocked<MessageFormatterService>;
   let mockTelegramBot: jest.Mocked<TelegramBot>;
   let mockCronSchedule: jest.MockedFunction<typeof cron.schedule>;
+  let mockStrategyRunner: jest.Mocked<CorrelationStrategyRunnerService>;
+  let mockCorrelationConfig: jest.Mocked<CorrelationConfigurationService>;
 
   const mockHealthStatus: HealthStatus = {
     status: 'healthy',
@@ -43,30 +51,67 @@ describe('TelegramBotService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
+    // Logger mock
     mockLogger = {
       info: jest.fn(),
       warn: jest.fn(),
       error: jest.fn(),
       debug: jest.fn(),
-    };
+    } as jest.Mocked<Logger>;
 
+    // Health service mock
     mockHealthService = {
       checkHealth: jest.fn().mockResolvedValue(mockHealthStatus),
       checkServiceHealth: jest.fn().mockResolvedValue(true),
       getUptime: jest.fn().mockReturnValue(300000),
-    };
+    } as jest.Mocked<HealthService>;
 
+    // Message formatter mock
+    mockMessageFormatter = {
+      formatHealthMessage: jest.fn().mockReturnValue('Mock system status message'),
+      formatStartMessage: jest.fn().mockReturnValue('Welcome to the Trading Bot! 🚀\n\nAvailable commands:\n/help - Show this help message\n/health - Check system health\n/start - Start the bot'),
+      formatHelpMessage: jest.fn().mockReturnValue('Mock help message'),
+      formatUnknownCommandMessage: jest.fn().mockReturnValue('Mock unknown command message'),
+      formatCorrelationCrackSignal: jest.fn().mockReturnValue('Mock signal message'),
+    } as jest.Mocked<MessageFormatterService>;
+
+    // Correlation configuration service mock
+    mockCorrelationConfig = {
+      getAvailablePairs: jest.fn().mockReturnValue(['BTCUSDT/ETHUSDT']),
+      getStrategyConfig: jest.fn().mockReturnValue({
+        name: 'Test Config',
+        timeframe: '1h',
+        threshold: 0.8,
+      }),
+      configs: new Map(),
+      initializeConfigs: jest.fn(),
+    } as unknown as jest.Mocked<CorrelationConfigurationService>;
+
+    // Strategy runner mock
+    mockStrategyRunner = {
+      executeStrategy: jest.fn().mockResolvedValue(undefined),
+    } as jest.Mocked<CorrelationStrategyRunnerService>;
+
+    // Telegram bot mock
     mockTelegramBot = {
       on: jest.fn(),
       sendMessage: jest.fn().mockResolvedValue({}),
-    } as any;
+    } as unknown as jest.Mocked<TelegramBot>;
 
+    // Cron mock
     mockCronSchedule = cron.schedule as jest.MockedFunction<typeof cron.schedule>;
     mockCronSchedule.mockImplementation(() => ({} as any));
 
     (TelegramBot as jest.MockedClass<typeof TelegramBot>).mockImplementation(() => mockTelegramBot);
 
-    telegramBotService = new TelegramBotService(mockLogger, mockHealthService);
+    // Initialize service with all required dependencies
+    telegramBotService = new TelegramBotService(
+      mockLogger,
+      mockHealthService,
+      mockMessageFormatter,
+      mockStrategyRunner,
+      mockCorrelationConfig
+    );
   });
 
   describe('initialize', () => {
@@ -92,7 +137,13 @@ describe('TelegramBotService', () => {
       jest.resetModules();
       const { TelegramBotService: TelegramBotServiceWithoutToken } = require('../telegram-bot.service');
       
-      const serviceWithMissingToken = new TelegramBotServiceWithoutToken(mockLogger, mockHealthService);
+      const serviceWithMissingToken = new TelegramBotServiceWithoutToken(
+        mockLogger,
+        mockHealthService,
+        mockMessageFormatter,
+        mockStrategyRunner,
+        mockCorrelationConfig
+      );
       await serviceWithMissingToken.initialize();
 
       expect(mockLogger.warn).toHaveBeenCalledWith('Telegram bot token not provided, bot functionality will be disabled');
@@ -130,49 +181,69 @@ describe('TelegramBotService', () => {
       await telegramBotService.initialize();
     });
 
-    it('should handle /start command', async () => {
+    it('should handle /start command and use MessageFormatterService', async () => {
+      const welcomeMessage = 'Welcome to the Trading Bot! 🚀';
+      mockMessageFormatter.formatStartMessage.mockReturnValue(welcomeMessage);
+      
       await telegramBotService.handleCommand('/start', mockContext);
 
+      expect(mockMessageFormatter.formatStartMessage).toHaveBeenCalled();
       expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(
         'test-chat-id',
-        'Welcome to the Trading Bot! 🚀\n\nAvailable commands:\n/help - Show this help message\n/health - Check system health\n/start - Start the bot'
+        welcomeMessage
       );
     });
 
-    it('should handle /health command', async () => {
+    it('should handle /health command and use MessageFormatterService', async () => {
+      const healthMessage = '✅ System Status: HEALTHY';
+      mockMessageFormatter.formatHealthMessage.mockReturnValue(healthMessage);
+      
       await telegramBotService.handleCommand('/health', mockContext);
 
       expect(mockHealthService.checkHealth).toHaveBeenCalled();
+      expect(mockMessageFormatter.formatHealthMessage).toHaveBeenCalledWith(mockHealthStatus);
       expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(
         'test-chat-id',
-        expect.stringContaining('✅ System Status: HEALTHY')
+        healthMessage
       );
     });
 
-    it('should handle /help command', async () => {
+    it('should handle /help command and use MessageFormatterService', async () => {
+      const helpMessage = 'Trading Bot Help 📚';
+      mockMessageFormatter.formatHelpMessage.mockReturnValue(helpMessage);
+      
       await telegramBotService.handleCommand('/help', mockContext);
 
+      expect(mockMessageFormatter.formatHelpMessage).toHaveBeenCalled();
       expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(
         'test-chat-id',
-        'Trading Bot Help 📚\n\nAvailable commands:\n/start - Initialize the bot\n/health - Check system health status\n/help - Show this help message\n\nFor more information, please check the documentation.'
+        helpMessage
       );
     });
 
-    it('should handle unknown commands', async () => {
+    it('should handle unknown commands using MessageFormatterService', async () => {
+      const unknownMessage = 'Unknown command. Use /help to see available commands.';
+      mockMessageFormatter.formatUnknownCommandMessage.mockReturnValue(unknownMessage);
+      
       await telegramBotService.handleCommand('/unknown', mockContext);
 
+      expect(mockMessageFormatter.formatUnknownCommandMessage).toHaveBeenCalled();
       expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(
         'test-chat-id',
-        'Unknown command. Use /help to see available commands.'
+        unknownMessage
       );
     });
 
     it('should handle case insensitive commands', async () => {
+      const welcomeMessage = 'Welcome to the Trading Bot! 🚀';
+      mockMessageFormatter.formatStartMessage.mockReturnValue(welcomeMessage);
+      
       await telegramBotService.handleCommand('/START', mockContext);
 
+      expect(mockMessageFormatter.formatStartMessage).toHaveBeenCalled();
       expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(
         'test-chat-id',
-        expect.stringContaining('Welcome to the Trading Bot!')
+        welcomeMessage
       );
     });
 
@@ -187,7 +258,13 @@ describe('TelegramBotService', () => {
     });
 
     it('should warn when bot not initialized', async () => {
-      const uninitializedService = new TelegramBotService(mockLogger, mockHealthService);
+      const uninitializedService = new TelegramBotService(
+        mockLogger,
+        mockHealthService,
+        mockMessageFormatter,
+        mockStrategyRunner,
+        mockCorrelationConfig
+      );
 
       await uninitializedService.handleCommand('/start', mockContext);
 
@@ -233,12 +310,39 @@ describe('TelegramBotService', () => {
 
       await telegramBotService.startBackgroundTasks();
       
-      // Execute the health check callback
       if (healthCheckCallback) {
         await healthCheckCallback();
       }
 
       expect(mockHealthService.checkHealth).toHaveBeenCalled();
+    });
+
+    it('should execute correlation strategy tasks', async () => {
+      const availablePairs = ['BTCUSDT/ETHUSDT', 'BTCUSDT/LTCUSDT'];
+      mockCorrelationConfig.getAvailablePairs.mockReturnValue(availablePairs);
+
+      let strategyCallback: ((now?: Date | 'manual' | 'init') => void) | undefined;
+      mockCronSchedule.mockImplementation((schedule, callback) => {
+        if (schedule === '*/5 * * * 1-5') { // Correlation check schedule
+          strategyCallback = callback as (now?: Date | 'manual' | 'init') => void;
+        }
+        return {} as any;
+      });
+
+      await telegramBotService.startBackgroundTasks();
+      
+      if (strategyCallback) {
+        await strategyCallback();
+      }
+
+      expect(mockCorrelationConfig.getAvailablePairs).toHaveBeenCalled();
+      expect(mockStrategyRunner.executeStrategy).toHaveBeenCalledTimes(availablePairs.length);
+      availablePairs.forEach(pair => {
+        expect(mockStrategyRunner.executeStrategy).toHaveBeenCalledWith(
+          pair,
+          expect.any(Function)
+        );
+      });
     });
 
     it('should handle health check task errors', async () => {
@@ -261,12 +365,14 @@ describe('TelegramBotService', () => {
       expect(mockLogger.error).toHaveBeenCalledWith('Background health check failed', error);
     });
 
-    it('should warn when system health is not healthy', async () => {
+    it('should warn when system health is not healthy and use MessageFormatterService', async () => {
       const unhealthyStatus: HealthStatus = {
         ...mockHealthStatus,
         status: 'degraded',
       };
       mockHealthService.checkHealth.mockResolvedValueOnce(unhealthyStatus);
+      const unhealthyMessage = '⚠️ System Status: DEGRADED';
+      mockMessageFormatter.formatHealthMessage.mockReturnValue(unhealthyMessage);
 
       let healthCheckCallback: ((now?: Date | 'manual' | 'init') => void) | undefined;
       mockCronSchedule.mockImplementation((schedule, callback) => {
@@ -284,8 +390,10 @@ describe('TelegramBotService', () => {
       expect(mockLogger.warn).toHaveBeenCalledWith('System health check failed', { health: unhealthyStatus });
     });
 
-    it('should execute daily report task', async () => {
+    it('should execute daily report task and use MessageFormatterService', async () => {
       await telegramBotService.initialize();
+      const formattedHealth = '✅ System Status: HEALTHY';
+      mockMessageFormatter.formatHealthMessage.mockReturnValue(formattedHealth);
 
       let dailyReportCallback: ((now?: Date | 'manual' | 'init') => void) | undefined;
       mockCronSchedule.mockImplementation((schedule, callback) => {
@@ -301,31 +409,35 @@ describe('TelegramBotService', () => {
       }
 
       expect(mockHealthService.checkHealth).toHaveBeenCalled();
+      expect(mockMessageFormatter.formatHealthMessage).toHaveBeenCalledWith(mockHealthStatus);
       expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(
         'test-chat-id',
         expect.stringContaining('Daily System Report:')
       );
+      expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(
+        'test-chat-id',
+        expect.stringContaining(formattedHealth)
+      );
     });
 
-    it('should handle daily report task errors', async () => {
-      const error = new Error('Daily report failed');
-      mockHealthService.checkHealth.mockRejectedValueOnce(error);
+    it('should handle correlation strategy errors', async () => {
+      const error = new Error('Strategy execution failed');
+      mockStrategyRunner.executeStrategy.mockRejectedValueOnce(error);
 
-      let dailyReportCallback: ((now?: Date | 'manual' | 'init') => void) | undefined;
+      let strategyCallback: ((now?: Date | 'manual' | 'init') => void) | undefined;
       mockCronSchedule.mockImplementation((schedule, callback) => {
-        if (schedule === '0 9 * * *') {
-          dailyReportCallback = callback as (now?: Date | 'manual' | 'init') => void;
+        if (schedule === '*/5 * * * 1-5') {
+          strategyCallback = callback as (now?: Date | 'manual' | 'init') => void;
         }
         return {} as any;
       });
 
-      await telegramBotService.initialize();
       await telegramBotService.startBackgroundTasks();
-      if (dailyReportCallback) {
-        await dailyReportCallback();
+      if (strategyCallback) {
+        await strategyCallback();
       }
 
-      expect(mockLogger.error).toHaveBeenCalledWith('Failed to send daily report', error);
+      expect(mockLogger.error).toHaveBeenCalledWith('Failed to execute correlation strategy', error);
     });
   });
 
@@ -344,14 +456,21 @@ describe('TelegramBotService', () => {
     });
 
     it('should format healthy status message correctly', async () => {
+      const healthyMessage = '✅ System Status: HEALTHY';
+      mockMessageFormatter.formatHealthMessage.mockReturnValue(healthyMessage);
+
       await telegramBotService.handleCommand('/health', {
         chatId: 'test-chat-id',
         userId: 'test-user-id',
         messageId: 123,
       });
 
-      const expectedMessage = expect.stringMatching(/✅ System Status: HEALTHY/);
-      expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith('test-chat-id', expectedMessage);
+      expect(mockHealthService.checkHealth).toHaveBeenCalled();
+      expect(mockMessageFormatter.formatHealthMessage).toHaveBeenCalledWith(mockHealthStatus);
+      expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(
+        'test-chat-id',
+        healthyMessage
+      );
     });
 
     it('should format degraded status message correctly', async () => {
@@ -360,6 +479,9 @@ describe('TelegramBotService', () => {
         status: 'degraded',
       };
       mockHealthService.checkHealth.mockResolvedValueOnce(degradedStatus);
+      
+      const degradedMessage = '⚠️ System Status: DEGRADED';
+      mockMessageFormatter.formatHealthMessage.mockReturnValue(degradedMessage);
 
       await telegramBotService.handleCommand('/health', {
         chatId: 'test-chat-id',
@@ -367,8 +489,11 @@ describe('TelegramBotService', () => {
         messageId: 123,
       });
 
-      const expectedMessage = expect.stringMatching(/⚠️ System Status: DEGRADED/);
-      expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith('test-chat-id', expectedMessage);
+      expect(mockMessageFormatter.formatHealthMessage).toHaveBeenCalledWith(degradedStatus);
+      expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(
+        'test-chat-id',
+        degradedMessage
+      );
     });
 
     it('should format unhealthy status message correctly', async () => {
@@ -377,6 +502,9 @@ describe('TelegramBotService', () => {
         status: 'unhealthy',
       };
       mockHealthService.checkHealth.mockResolvedValueOnce(unhealthyStatus);
+      
+      const unhealthyMessage = '❌ System Status: UNHEALTHY';
+      mockMessageFormatter.formatHealthMessage.mockReturnValue(unhealthyMessage);
 
       await telegramBotService.handleCommand('/health', {
         chatId: 'test-chat-id',
@@ -384,30 +512,11 @@ describe('TelegramBotService', () => {
         messageId: 123,
       });
 
-      const expectedMessage = expect.stringMatching(/❌ System Status: UNHEALTHY/);
-      expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith('test-chat-id', expectedMessage);
-    });
-
-    it('should include uptime in formatted message', async () => {
-      await telegramBotService.handleCommand('/health', {
-        chatId: 'test-chat-id',
-        userId: 'test-user-id',
-        messageId: 123,
-      });
-
-      const expectedMessage = expect.stringMatching(/🕐 Uptime: 5 minutes/);
-      expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith('test-chat-id', expectedMessage);
-    });
-
-    it('should include service status in formatted message', async () => {
-      await telegramBotService.handleCommand('/health', {
-        chatId: 'test-chat-id',
-        userId: 'test-user-id',
-        messageId: 123,
-      });
-
-      const expectedMessage = expect.stringMatching(/✅ logger: healthy \(5ms\)/);
-      expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith('test-chat-id', expectedMessage);
+      expect(mockMessageFormatter.formatHealthMessage).toHaveBeenCalledWith(unhealthyStatus);
+      expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(
+        'test-chat-id',
+        unhealthyMessage
+      );
     });
 
     it('should handle services without response time', async () => {
@@ -421,6 +530,9 @@ describe('TelegramBotService', () => {
         },
       };
       mockHealthService.checkHealth.mockResolvedValueOnce(statusWithoutResponseTime);
+      
+      const formattedMessage = '✅ System Status: HEALTHY';
+      mockMessageFormatter.formatHealthMessage.mockReturnValue(formattedMessage);
 
       await telegramBotService.handleCommand('/health', {
         chatId: 'test-chat-id',
@@ -428,8 +540,11 @@ describe('TelegramBotService', () => {
         messageId: 123,
       });
 
-      const expectedMessage = expect.stringMatching(/✅ logger: healthy\n/);
-      expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith('test-chat-id', expectedMessage);
+      expect(mockMessageFormatter.formatHealthMessage).toHaveBeenCalledWith(statusWithoutResponseTime);
+      expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(
+        'test-chat-id',
+        formattedMessage
+      );
     });
   });
 
@@ -504,9 +619,10 @@ describe('TelegramBotService', () => {
         await messageHandler(mockMessage);
       }
 
+      expect(mockMessageFormatter.formatStartMessage).toHaveBeenCalled();
       expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(
         '123',
-        expect.stringContaining('Welcome to the Trading Bot!')
+        'Welcome to the Trading Bot! 🚀\n\nAvailable commands:\n/help - Show this help message\n/health - Check system health\n/start - Start the bot'
       );
     });
   });

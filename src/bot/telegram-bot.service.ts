@@ -6,6 +6,10 @@ import { HealthService } from '@/domain/interfaces/health-service.interface';
 import { Logger } from '@/utils/logger';
 import { TYPES } from '@/config/types';
 import { config } from '@/config/environment';
+import { BOT_CONSTANTS } from '@/config/constants';
+import { MessageFormatterService } from './message-formatter.service';
+import { CorrelationStrategyRunnerService } from './correlation-strategy-runner.service';
+import { CorrelationConfigurationService } from './correlation-configuration.service';
 
 @injectable()
 export class TelegramBotService implements BotService {
@@ -13,7 +17,10 @@ export class TelegramBotService implements BotService {
 
   constructor(
     @inject(TYPES.Logger) private logger: Logger,
-    @inject(TYPES.HealthService) private healthService: HealthService
+    @inject(TYPES.HealthService) private healthService: HealthService,
+    @inject(TYPES.MessageFormatterService) private messageFormatter: MessageFormatterService,
+    @inject(TYPES.CorrelationStrategyRunnerService) private strategyRunner: CorrelationStrategyRunnerService,
+    @inject(TYPES.CorrelationConfigurationService) private correlationConfig: CorrelationConfigurationService
   ) {}
 
   async initialize(): Promise<void> {
@@ -24,9 +31,7 @@ export class TelegramBotService implements BotService {
       }
 
       this.bot = new TelegramBot(config.TELEGRAM_BOT_TOKEN, { polling: true });
-      
       this.setupEventHandlers();
-      
       this.logger.info('Telegram bot initialized successfully');
     } catch (error) {
       this.logger.error('Failed to initialize Telegram bot', error);
@@ -61,8 +66,8 @@ export class TelegramBotService implements BotService {
   }
 
   async startBackgroundTasks(): Promise<void> {
-    // Schedule health checks every 5 minutes
-    cron.schedule('*/5 * * * *', async () => {
+    // Schedule health checks
+    cron.schedule(BOT_CONSTANTS.HEALTH_CHECK_SCHEDULE, async () => {
       try {
         const health = await this.getHealthStatus();
         if (health.status !== 'healthy') {
@@ -73,16 +78,34 @@ export class TelegramBotService implements BotService {
       }
     });
 
-    // Schedule periodic system status report (daily at 9 AM)
-    cron.schedule('0 9 * * *', async () => {
+    // Schedule daily system status report
+    cron.schedule(BOT_CONSTANTS.DAILY_REPORT_SCHEDULE, async () => {
       try {
         if (config.TELEGRAM_CHAT_ID) {
           const health = await this.getHealthStatus();
-          const message = this.formatHealthMessage(health);
+          const message = this.messageFormatter.formatHealthMessage(health);
           await this.sendMessage(config.TELEGRAM_CHAT_ID, `Daily System Report:\n\n${message}`);
         }
       } catch (error) {
         this.logger.error('Failed to send daily report', error);
+      }
+    });
+
+    // Schedule correlation strategy execution for each configured pair
+    cron.schedule(BOT_CONSTANTS.CORRELATION_CHECK_SCHEDULE, async () => {
+      try {
+        // Execute strategy for each configured correlation pair
+        for (const pair of this.correlationConfig.getAvailablePairs()) {
+          await this.strategyRunner.executeStrategy(pair, 
+            async (message: string) => {
+              if (config.TELEGRAM_CHAT_ID) {
+                await this.sendMessage(config.TELEGRAM_CHAT_ID, message);
+              }
+            }
+          );
+        }
+      } catch (error) {
+        this.logger.error('Failed to execute correlation strategy', error);
       }
     });
 
@@ -115,23 +138,23 @@ export class TelegramBotService implements BotService {
   }
 
   private async handleStartCommand(context: TelegramContext): Promise<void> {
-    const message = `Welcome to the Trading Bot! 🚀\n\nAvailable commands:\n/help - Show this help message\n/health - Check system health\n/start - Start the bot`;
+    const message = this.messageFormatter.formatStartMessage();
     await this.sendMessage(context.chatId, message);
   }
 
   private async handleHealthCommand(context: TelegramContext): Promise<void> {
     const health = await this.getHealthStatus();
-    const message = this.formatHealthMessage(health);
+    const message = this.messageFormatter.formatHealthMessage(health);
     await this.sendMessage(context.chatId, message);
   }
 
   private async handleHelpCommand(context: TelegramContext): Promise<void> {
-    const message = `Trading Bot Help 📚\n\nAvailable commands:\n/start - Initialize the bot\n/health - Check system health status\n/help - Show this help message\n\nFor more information, please check the documentation.`;
+    const message = this.messageFormatter.formatHelpMessage();
     await this.sendMessage(context.chatId, message);
   }
 
   private async handleUnknownCommand(context: TelegramContext): Promise<void> {
-    const message = `Unknown command. Use /help to see available commands.`;
+    const message = this.messageFormatter.formatUnknownCommandMessage();
     await this.sendMessage(context.chatId, message);
   }
 
@@ -143,26 +166,5 @@ export class TelegramBotService implements BotService {
     } catch (error) {
       this.logger.error('Failed to send Telegram message', error);
     }
-  }
-
-  private formatHealthMessage(health: HealthStatus): string {
-    const statusEmoji = health.status === 'healthy' ? '✅' : 
-                       health.status === 'degraded' ? '⚠️' : '❌';
-    
-    let message = `${statusEmoji} System Status: ${health.status.toUpperCase()}\n`;
-    message += `🕐 Uptime: ${Math.floor(health.uptime / 1000 / 60)} minutes\n`;
-    message += `📅 Last Check: ${health.timestamp.toISOString()}\n\n`;
-    
-    message += 'Services:\n';
-    for (const [serviceName, serviceHealth] of Object.entries(health.services)) {
-      const serviceEmoji = serviceHealth.status === 'healthy' ? '✅' : '❌';
-      message += `${serviceEmoji} ${serviceName}: ${serviceHealth.status}`;
-      if (serviceHealth.responseTime) {
-        message += ` (${serviceHealth.responseTime}ms)`;
-      }
-      message += '\n';
-    }
-    
-    return message;
   }
 }

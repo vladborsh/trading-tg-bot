@@ -18,6 +18,9 @@ export const TYPES = {
   // Indicators
   HighLowIndicator: Symbol.for('HighLowIndicator'),
   
+  // Strategies
+  CorrelationCrackStrategy: Symbol.for('CorrelationCrackStrategy'),
+  
   // Notification
   NotificationService: Symbol.for('NotificationService'),
   ChartService: Symbol.for('ChartService'),
@@ -35,4 +38,9 @@ export const TYPES = {
   
   // Health
   HealthService: Symbol.for('HealthService'),
+  
+  // Bot Services
+  MessageFormatterService: Symbol.for('MessageFormatterService'),
+  CorrelationConfigurationService: Symbol.for('CorrelationConfigurationService'),
+  CorrelationStrategyRunnerService: Symbol.for('CorrelationStrategyRunnerService'),
 } as const;

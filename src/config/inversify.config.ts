@@ -21,6 +21,15 @@ import { TokenBucketRateLimiter } from '../services/rate-limiter.service';
 import { HighLowIndicator } from '../core/indicators/high-low.indicator';
 import { HighLowIndicatorInterface } from '../core/indicators/indicator.interfaces';
 
+// Strategies
+import { CorrelationCrackStrategy } from '../core/strategies/correlation-crack.strategy';
+import { CorrelationCrackStrategyInterface } from '../core/strategies/strategy.interfaces';
+
+// Bot Services
+import { MessageFormatterService } from '../bot/message-formatter.service';
+import { CorrelationConfigurationService } from '../bot/correlation-configuration.service';
+import { CorrelationStrategyRunnerService, CorrelationStrategyRunnerServiceImpl } from '../bot/correlation-strategy-runner.service';
+
 export function setupContainer(): Container {
   const container = new Container();
 
@@ -49,6 +58,14 @@ export function setupContainer(): Container {
 
   // Indicators
   container.bind<HighLowIndicatorInterface>(TYPES.HighLowIndicator).to(HighLowIndicator).inSingletonScope();
+
+  // Strategies
+  container.bind<CorrelationCrackStrategyInterface>(TYPES.CorrelationCrackStrategy).to(CorrelationCrackStrategy).inSingletonScope();
+
+  // Bot Services
+  container.bind<MessageFormatterService>(TYPES.MessageFormatterService).to(MessageFormatterService).inSingletonScope();
+  container.bind<CorrelationConfigurationService>(TYPES.CorrelationConfigurationService).to(CorrelationConfigurationService).inSingletonScope();
+  container.bind<CorrelationStrategyRunnerService>(TYPES.CorrelationStrategyRunnerService).to(CorrelationStrategyRunnerServiceImpl).inSingletonScope();
 
   return container;
 }

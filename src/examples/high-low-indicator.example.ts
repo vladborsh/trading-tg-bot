@@ -25,7 +25,7 @@ async function main() {
     // Create indicator instance (no dependencies needed)
     const indicator = new HighLowIndicator();
 
-    // Example 1: Previous day high/low
+    // Example 1: Previous day high/low project,
     console.log('📊 Example 1: Previous Day High/Low');
     console.log('=====================================');
     
